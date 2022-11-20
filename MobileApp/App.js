@@ -38,12 +38,13 @@ export default class App extends Component {
 
     this.writeValue = this.writeValue.bind(this);
     this.setPassword = this.setPassword.bind(this);
-    this.updateService = this.updateService.bind(this);
-    this.updateCharacteristic = this.updateCharacteristic.bind(this);
+    this.updateDoorService = this.updateDoorService.bind(this);
+    this.updateUserService = this.updateUserService.bind(this);
+    this.updateDoorCharacteristic = this.updateDoorCharacteristic.bind(this);
+    this.updateUserCharacteristic = this.updateUserCharacteristic.bind(this);
     this.updateStatePassword = this.updateStatePassword.bind(this);
     this.checkPassword = this.checkPassword.bind(this);
     this.resetPassword = this.resetPassword.bind(this);
-    this.calibrate = this.calibrate.bind(this);
   }
 
   checkUpdate() {
@@ -134,7 +135,7 @@ export default class App extends Component {
           if (!this.state.doorConnected) {
             BleManager.connect(args.id)
               .then(() => {
-                console.log("Connected, checking characteristic");
+                console.log("Connected to door, checking characteristic");
                 this.setState({
                   doorConnected: true,
                   doorId: args.id
@@ -144,7 +145,7 @@ export default class App extends Component {
                   (peripheralInfo) => {
                     if (this.searchForCharacteristic(peripheralInfo.characteristics, this.state.doorCharacteristic, this.state.doorService)) {
                       this.setState({ readyToReadDoor: true });
-                      console.log("Characterstic found");
+                      console.log("Door characteristic found");
                     }
                   }
                 );
@@ -154,11 +155,11 @@ export default class App extends Component {
               });
           }
         }
-        if ('localName' in args.advertising && args.advertising.localName == 'Nano 33 IoT - Chirag') {
+        if ('localName' in args.advertising && args.advertising.localName == 'KnowTouch - User Component') {
           if (!this.state.userConnected) {
             BleManager.connect(args.id)
               .then(() => {
-                console.log("Connected, checking characteristic");
+                console.log("Connected to user, checking characteristic");
                 this.setState({
                   userConnected: true,
                   userId: args.id
@@ -166,9 +167,9 @@ export default class App extends Component {
 
                 BleManager.retrieveServices(args.id).then(
                   (peripheralInfo) => {
-                    if (this.searchForCharacteristic(peripheralInfo.characteristics, this.state.userCharacterstic, this.state.userService)) {
+                    if (this.searchForCharacteristic(peripheralInfo.characteristics, this.state.userCharacteristic, this.state.userService)) {
                       this.setState({ readyToReadUser: true });
-                      console.log("Characterstic found");
+                      console.log("User characteristic found");
                     }
                   }
                 );
@@ -211,12 +212,11 @@ export default class App extends Component {
     RNFS.readFile(path, 'utf8')
       .then((data) => {
         let dataArr = data.split('\n');
-
         this.setState({
           doorService: dataArr[0],
           doorCharacteristic: dataArr[1],
           userService: dataArr[2],
-          userCharacterstic: dataArr[3],
+          userCharacteristic: dataArr[3],
           password: dataArr[4],
           passwordSet: true
         });
@@ -242,12 +242,12 @@ export default class App extends Component {
   writeValue(val, door) {
     let id = door ? this.state.doorId : this.state.userId;
     let service = door  ? this.state.doorService : this.state.userService;
-    let characteristic = door ? this.state.doorCharacteristic : this.state.userCharacterstic;
-    if (this.state.readyToRead) {
+    let characteristic = door ? this.state.doorCharacteristic : this.state.userCharacteristic;
+    if (this.state.readyToReadDoor && door  || this.state.readyToReadUser && !door) {
       BleManager.write(
         id,
         service,
-        characterstic,
+        characteristic,
         [val]
       )
         .then(() => {
@@ -260,7 +260,7 @@ export default class App extends Component {
     else {
       Alert.alert(
         "Error: Disconnected",
-        "Cannot lock/unlock door without connecting to door component",
+        "Cannot set component value without connecting to component first",
         [
           { text: "OK", }
         ]
@@ -278,11 +278,11 @@ export default class App extends Component {
       });
 
 
-    let data = this.state.doorService + '\n' + this.state.doorCharacteristic +
-      this.state.userService + '\n' + this.state.userCharacterstic + '\n' + this.state.potentialPassword;
+    let data = this.state.doorService + '\n' + this.state.doorCharacteristic + '\n' +
+      this.state.userService + '\n' + this.state.userCharacteristic + '\n' + this.state.potentialPassword;
     RNFS.writeFile(path, data, 'utf8')
       .then(() => {
-        console.log('Data file written');
+        console.log('Data file written: ');
       })
       .catch((err) => {
         console.log(err.message);
@@ -304,7 +304,7 @@ export default class App extends Component {
     this.setState({ userService: val });
   }
   updateUserCharacteristic(val) {
-    this.setState({ userCharacterstic: val });
+    this.setState({ userCharacteristic: val });
   }
   updateStatePassword(val) {
     this.setState({
