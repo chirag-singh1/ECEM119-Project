@@ -27,18 +27,18 @@ bool open;
 void setup() {
 
   // Initialize GPIO pins
-  pinMode(TRIG_PIN, OUTPUT); 
+  pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
   servo.attach(3);
 
-  Serial.begin(9600); 
+  Serial.begin(9600);
 
   // Initialize BLE
   if (!BLE.begin()) {
     Serial.println("BLE Init Failed");
     while (1);
   }
-  BLE.setLocalName("Nano 33 IoT - Chirag");
+  BLE.setLocalName("KnowTouch - Door Component");
   BLE.setAdvertisedService(authenticationService);
   authenticationService.addCharacteristic(switchCharacteristic);
   BLE.addService(authenticationService);
@@ -60,7 +60,7 @@ void readDist() {
   digitalWrite(TRIG_PIN, LOW);
   time = pulseIn(ECHO_PIN, HIGH);
   dist = time * 0.017;
-  
+
 }
 
 void openLock() {
@@ -68,7 +68,7 @@ void openLock() {
     Serial.println("Not opening lock, no authentication");
     return;
   }
-  
+
   Serial.println("Opening lock");
 
   servo.write(SERVO_UNLOCKED);
@@ -106,7 +106,7 @@ void loop() {
 
     // Update (or at least attempt) to update lock status
     // Based on most recent changes
-    if ((dist == 0 || dist > threshold) && open) {   
+    if ((dist == 0 || dist > threshold) && open) {
       closeLock();
     }
     else if (dist <= threshold && dist != 0 && !open) {

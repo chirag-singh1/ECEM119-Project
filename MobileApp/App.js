@@ -130,7 +130,7 @@ export default class App extends Component {
     this.discoverHandler = bleManagerEmitter.addListener(
       'BleManagerDiscoverPeripheral',
       async (args) => {
-        if ('localName' in args.advertising && args.advertising.localName == 'Nano 33 IoT - Chirag') {
+        if ('localName' in args.advertising && args.advertising.localName == 'KnowTouch - Door Component') {
           if (!this.state.doorConnected) {
             BleManager.connect(args.id)
               .then(() => {
