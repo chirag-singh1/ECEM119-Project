@@ -1,16 +1,13 @@
 import numpy as np
-import asyncio
 from scipy.fftpack import fft
 import requests
 import time
-from bleak import BleakClient
+import asyncio
+from tornado import web, gen, ioloop
 
 BUFSIZE = 1000
 FREQUENCY = 200.0
 REFRESH_SPEED = 3.0
-
-ADDRESS = "24:71:89:cc:09:05"
-MODEL_NBR_UUID = "00002a24-0000-1000-8000-00805f9b34fb"
 
 def find_border(t, n, dt, start_time):
     for i in range(len(t)):
@@ -38,29 +35,39 @@ def generate_interpolated_data(data, t):
 
     return out, ot
 
+calibrating = False
+class MainHandler(web.RequestHandler):
+    def get(self):
+        global calibrating
+        calibrating = True
+        self.write("Success")
 
-
-async def main():
-    client = BleakClient(ADDRESS)
+def make_app():
+    return web.Application([
+        (r"/calibrate", MainHandler),
+    ])
+async def main_task():
+    global calibrating
     try:
-        await client.connect()
-        while True:
-            curr_req_start_time = time.time()
-            try:
-                x = requests.get('http://192.168.4.1', timeout=8)
+        print("Making new request")
+        if calibrating:
+            print("Calibration request")
+        x = requests.get('http://192.168.4.1', timeout=8)
 
-                av, t = generate_interpolated_data(x.json()['av'], x.json()['t'])
-                print(t)
-                print(av)
-                if time.time() - curr_req_start_time < REFRESH_SPEED * 1000:
-                    time.sleep(REFRESH_SPEED - (time.time() - curr_req_start_time) / 1000)
-
-                await client.write_gatt_char(MODEL_NBR_UUID, b'1')
-            except:
-                print("exception!!!!")
+        av, t = generate_interpolated_data(x.json()['av'], x.json()['t'])
+        print(t)
+        print(av)
+        # WRite authentication to serial port here
     except Exception as e:
         print(e)
-    finally:
-        await client.disconnect()
+    calibrating = False
 
-asyncio.run(main())
+async def main():
+    app = make_app()
+    app.listen(8888)
+    pc = ioloop.PeriodicCallback(main_task, 3000)
+    pc.start()
+    await asyncio.Event().wait()
+
+if __name__ == "__main__":
+    asyncio.run(main())
