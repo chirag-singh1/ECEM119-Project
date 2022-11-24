@@ -1,12 +1,16 @@
 import numpy as np
-from threading import Thread
+import asyncio
 from scipy.fftpack import fft
 import requests
 import time
+from bleak import BleakClient
 
 BUFSIZE = 1000
 FREQUENCY = 200.0
 REFRESH_SPEED = 3.0
+
+ADDRESS = "24:71:89:cc:09:05"
+MODEL_NBR_UUID = "00002a24-0000-1000-8000-00805f9b34fb"
 
 def find_border(t, n, dt, start_time):
     for i in range(len(t)):
@@ -35,8 +39,11 @@ def generate_interpolated_data(data, t):
     return out, ot
 
 
-class ProcessAuthenticationTask(Thread):
-    def run(self):
+
+async def main():
+    client = BleakClient(ADDRESS)
+    try:
+        await client.connect()
         while True:
             curr_req_start_time = time.time()
             try:
@@ -47,10 +54,13 @@ class ProcessAuthenticationTask(Thread):
                 print(av)
                 if time.time() - curr_req_start_time < REFRESH_SPEED * 1000:
                     time.sleep(REFRESH_SPEED - (time.time() - curr_req_start_time) / 1000)
+
+                await client.write_gatt_char(MODEL_NBR_UUID, b'1')
             except:
                 print("exception!!!!")
+    except Exception as e:
+        print(e)
+    finally:
+        await client.disconnect()
 
-
-if __name__ == '__main__':
-    b = ProcessAuthenticationTask()
-    b.start()
+asyncio.run(main())
