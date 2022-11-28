@@ -42,7 +42,7 @@ def fft(x):
     n = x.size
     timestep = 0.1
     freq = np.fft.fftfreq(n)
-    
+
     return freq, abs(fourier)
 
 def composite(ax, ay, az, gx, gy, gz):
@@ -50,7 +50,7 @@ def composite(ax, ay, az, gx, gy, gz):
     for i in [ay, az, gx, gy, gz]:
         fr, fo = fft(i)
         composite += fo
-    
+
     return freq, composite
 
 def get_mag_data(ax, ay, az):
@@ -112,7 +112,7 @@ def get_freqs_and_fouriers(list_of_data):
         fr, fo = av(ax, ay, az)
         freq.append(fr)
         fourier.append(fo)
-        
+
     return freq, fourier
 
 def get_multisim_data(names, ffts, freqs, funcs):
@@ -120,13 +120,13 @@ def get_multisim_data(names, ffts, freqs, funcs):
     for i in range(0, len(names) - 1):
         for j in range(i + 1, len(names)):
             cur_element_in_out = []
-            for func in funcs: 
+            for func in funcs:
                 cur_element_in_out.append(func(ffts[i], ffts[j], freqs[i], freqs[j]))
             cur_element_in_out.append(1 if names[i] == names[j] else 0)
             out.append(cur_element_in_out)
     out = np.array(out)
     return out
-  
+
 def get_best_max_depth(np_array_of_data, max_depth_to_check=10, scoring='accuracy'):
     d_range = list(range(1, max_depth_to_check + 1))
     d_scores = []
@@ -136,7 +136,7 @@ def get_best_max_depth(np_array_of_data, max_depth_to_check=10, scoring='accurac
         scores = cross_val_score(dt_clf, X=np_array_of_data[:,:-1], y=np_array_of_data[:,-1], cv=min_size, scoring=scoring)
         d_scores.append(scores.mean())
     return d_range[np.argmax(d_scores)]
-    
+
 def get_decision_tree_clf(names, ffts, freqs, funcs, max_depth_to_check=10, scoring='accuracy'):
     np_array_of_data = get_multisim_data(names, ffts, freqs, funcs)
     dt_clf = DecisionTreeClassifier(max_depth=get_best_max_depth(np_array_of_data=np_array_of_data, max_depth_to_check=max_depth_to_check, scoring=scoring))
@@ -160,7 +160,7 @@ class MVDTCLassifier:
 
     def predict(self, X):
         return np.round(np.average(np.transpose(np.array([self.clfs[i].predict(ind_X.reshape(-1, 1)) for ind_X in np.transpose(X)])), axis=1) + 0.001)
-    
+
     def get_params(self, deep=False):
         return {"clfs": self.clfs}
 
@@ -173,13 +173,14 @@ calibrating = False
 class MainHandler(web.RequestHandler):
     def get(self):
         global calibrating
-        calibrating = True
+        calibrating = not calibrating
         self.write("Success")
 
 def make_app():
     return web.Application([
         (r"/calibrate", MainHandler),
     ])
+
 async def main_task():
     global calibrating
     try:
@@ -194,7 +195,7 @@ async def main_task():
         # WRite authentication to serial port here
     except Exception as e:
         print(e)
-    calibrating = False
+    # calibrating = False
 
 async def main():
     app = make_app()

@@ -25,12 +25,9 @@ export default class App extends Component {
     super();
 
     this.state = {
-      userConnected: false,
       doorConnected: false,
       readyToReadDoor: false,
-      readyToReadUser: false,
       readDoor: "No data read yet",
-      readUser: "No data read yet",
       calibrated: false,
       authenticated: false,
       passwordSet: false,
@@ -39,9 +36,7 @@ export default class App extends Component {
     this.writeValue = this.writeValue.bind(this);
     this.setPassword = this.setPassword.bind(this);
     this.updateDoorService = this.updateDoorService.bind(this);
-    this.updateUserService = this.updateUserService.bind(this);
     this.updateDoorCharacteristic = this.updateDoorCharacteristic.bind(this);
-    this.updateUserCharacteristic = this.updateUserCharacteristic.bind(this);
     this.updateStatePassword = this.updateStatePassword.bind(this);
     this.checkPassword = this.checkPassword.bind(this);
     this.resetPassword = this.resetPassword.bind(this);
@@ -57,21 +52,6 @@ export default class App extends Component {
         )
           .then((readData) => {
             this.setState({ readDoor: readData });
-          })
-          .catch((error) => {
-            // Failure code
-            console.log(error);
-          });
-      }
-
-      if (this.state.readyToReadUser) {
-        BleManager.read(
-          this.state.userId,
-          this.state.userService,
-          this.state.userCharacteristic
-        )
-          .then((readData) => {
-            this.setState({ readUser: readData });
           })
           .catch((error) => {
             // Failure code
@@ -138,9 +118,11 @@ export default class App extends Component {
                 console.log("Connected to door, checking characteristic");
                 this.setState({
                   doorConnected: true,
-                  doorId: args.id
+                  doorId: args.id,
+                  readyToReadDoor: true,
                 });
 
+                /*
                 BleManager.retrieveServices(args.id).then(
                   (peripheralInfo) => {
                     if (this.searchForCharacteristic(peripheralInfo.characteristics, this.state.doorCharacteristic, this.state.doorService)) {
@@ -148,31 +130,7 @@ export default class App extends Component {
                       console.log("Door characteristic found");
                     }
                   }
-                );
-              })
-              .catch((error) => {
-                console.log(error);
-              });
-          }
-        }
-        if ('localName' in args.advertising && args.advertising.localName == 'KnowTouch - User Component') {
-          if (!this.state.userConnected) {
-            BleManager.connect(args.id)
-              .then(() => {
-                console.log("Connected to user, checking characteristic");
-                this.setState({
-                  userConnected: true,
-                  userId: args.id
-                });
-
-                BleManager.retrieveServices(args.id).then(
-                  (peripheralInfo) => {
-                    if (this.searchForCharacteristic(peripheralInfo.characteristics, this.state.userCharacteristic, this.state.userService)) {
-                      this.setState({ readyToReadUser: true });
-                      console.log("User characteristic found");
-                    }
-                  }
-                );
+                );*/
               })
               .catch((error) => {
                 console.log(error);
@@ -187,7 +145,7 @@ export default class App extends Component {
       'BleManagerDisconnectPeripheral',
       async () => {
         console.log("Disconnected, continuing to scan");
-        this.setState({ doorConnected: false, userConnected: false, readyToRead: false });
+        this.setState({ doorConnected: false, readyToReadDoor: false });
         BleManager.scan([], 8, true).then((results) => {
           console.log('Scanning...');
         });
@@ -197,7 +155,7 @@ export default class App extends Component {
     this.scanStopHandler = bleManagerEmitter.addListener('BleManagerStopScan',
       () => {
         console.log('Scanning stopped');
-        if (!this.state.doorConnected || !this.state.userConnected) {
+        if (!this.state.doorConnected) {
           BleManager.scan([], 8).then((results) => {
             console.log('Scanning...');
           });
@@ -205,7 +163,7 @@ export default class App extends Component {
       }
     );
 
-    this.setState({ userConnected: false, doorConnected: false });
+    this.setState({doorConnected: false });
 
     this.checkUpdate();
 
@@ -215,9 +173,7 @@ export default class App extends Component {
         this.setState({
           doorService: dataArr[0],
           doorCharacteristic: dataArr[1],
-          userService: dataArr[2],
-          userCharacteristic: dataArr[3],
-          password: dataArr[4],
+          password: dataArr[2],
           passwordSet: true
         });
       })
@@ -231,19 +187,16 @@ export default class App extends Component {
     this.discoverHandler.remove();
     this.disconnectHandler.remove();
 
-    if (this.state.userConnected) {
-      BleManager.disconnect(this.state.userId).then(() => { console.log("Disconnected"); });
-    }
     if (this.state.doorConnected) {
       BleManager.disconnect(this.state.doorId).then(() => { console.log("Disconnected"); });
     }
   }
 
-  writeValue(val, door) {
-    let id = door ? this.state.doorId : this.state.userId;
-    let service = door  ? this.state.doorService : this.state.userService;
-    let characteristic = door ? this.state.doorCharacteristic : this.state.userCharacteristic;
-    if (this.state.readyToReadDoor && door  || this.state.readyToReadUser && !door) {
+  writeValue(val) {
+    let id = this.state.doorId;
+    let service = this.state.doorService;
+    let characteristic = this.state.doorCharacteristic;
+    if (this.state.readyToReadDoor) {
       BleManager.write(
         id,
         service,
@@ -278,8 +231,7 @@ export default class App extends Component {
       });
 
 
-    let data = this.state.doorService + '\n' + this.state.doorCharacteristic + '\n' +
-      this.state.userService + '\n' + this.state.userCharacteristic + '\n' + this.state.potentialPassword;
+    let data = this.state.doorService + '\n' + this.state.doorCharacteristic + '\n' + this.state.potentialPassword;
     RNFS.writeFile(path, data, 'utf8')
       .then(() => {
         console.log('Data file written: ');
@@ -299,12 +251,6 @@ export default class App extends Component {
   }
   updateDoorCharacteristic(val) {
     this.setState({ doorCharacteristic: val });
-  }
-  updateUserService(val) {
-    this.setState({ userService: val });
-  }
-  updateUserCharacteristic(val) {
-    this.setState({ userCharacteristic: val });
   }
   updateStatePassword(val) {
     this.setState({
@@ -335,18 +281,33 @@ export default class App extends Component {
     });
   }
 
+  startCalibration() {
+    fetch('http://192.168.4.2:8888/calibrate')
+    .then((response) => {
+      Alert.alert(
+        "Calibration Started",
+        "Calibration has been toggled",
+        [
+          { text: "OK", }
+        ]
+      );
+      this.setState({calibrated: !this.state.calibrated});
+    })
+    .catch((error) => {
+      console.error(error);
+    });
+  }
+
   render() {
     if (this.state.authenticated && this.state.passwordSet) {
       return (
         <View>
           <Text>{this.state.doorConnected ? "Connected to door component" : "Scanning for door component..."}</Text>
-          <Text>{this.state.userConnected ? "Connected to user component" : "Scanning for user component..."}</Text>
           <Text>{this.state.readDoor == 0 ? "Unauthentiated" : (this.state.readDoor == 1 ? "Authenticated" : "Unknown")}</Text>
-          <Text>{this.state.readUser == 0 ? "Uncalibrated" : (this.state.readUser == 1 ? "Calibrated" : "Unknown")}</Text>
-          <Button onPress={() => this.writeValue(1, true)} title="Unauthenticate"></Button>
-          <Button onPress={() => this.writeValue(0, true)} title="Authenticate"></Button>
+          <Button onPress={() => this.writeValue(1)} title="Unauthenticate"></Button>
+          <Button onPress={() => this.writeValue(0)} title="Authenticate"></Button>
           <Button onPress={this.resetPassword} title="Reset Password"></Button>
-          <Button onPress={() => this.writeValue(0, false)} title="Start Calibrating"></Button>
+          <Button onPress={() => this.startCalibration()} title={this.state.calibrated ? "Stop calibrating" : "Start Calibrating"}></Button>
         </View>
       );
     }
@@ -365,8 +326,6 @@ export default class App extends Component {
           <Text>{"Not yet authenticated"}</Text>
           <TextInput onChangeText={this.updateDoorService} placeholder="Door Component Service" />
           <TextInput onChangeText={this.updateDoorCharacteristic} placeholder="Door Component Characteristic" />
-          <TextInput onChangeText={this.updateUserService} placeholder="User Component Service" />
-          <TextInput onChangeText={this.updateUserCharacteristic} placeholder="User Component Characteristic" />
           <TextInput onChangeText={this.updateStatePassword} placeholder="Password" />
           <Button onPress={this.setPassword} title="Set Password">Set Password</Button>
         </View>
