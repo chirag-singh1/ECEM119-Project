@@ -29,54 +29,6 @@ def find_border(t, n, dt, start_time):
             return i-1, i
     return len(t)-1, len(t)
 
-<<<<<<< HEAD
-=======
-
-def generate_interpolated_data(data, t):
-    start_time = t[0]
-    end_time = t[len(t)-1]
-    dt = 1000.0 / FREQUENCY
-    n = 1
-
-    ot = np.array([0.0])
-    out = np.array([data[0]])
-    while n*dt + start_time < end_time:
-        prev, curr = find_border(t, n, dt, start_time)
-        ct = start_time + n * dt
-        if curr < BUFSIZE:
-            ot = np.append(t, [n*dt])
-            out = np.append(out, [data[prev] * (1-((ct - t[prev]) / (t[curr] - t[prev]))
-                                                ) + data[curr] * (1-((t[curr] - ct) / (t[curr] - t[prev])))])
-            n += 1
-
-    return out, ot
-
-# FFT Utilities
-def fft(x):
-    fourier = np.fft.fft(x)
-    n = x.size
-    timestep = 0.1
-    freq = np.fft.fftfreq(n)
-
-    return freq, abs(fourier)
-
-def composite(ax, ay, az, gx, gy, gz):
-    freq, composite = fft(ax)
-    for i in [ay, az, gx, gy, gz]:
-        fr, fo = fft(i)
-        composite += fo
-
-    return freq, composite
-
-def get_mag_data(ax, ay, az):
-    vec = extract_periods(np.sqrt(ax*ax + ay*ay + az*az), 2)
-    return vec
-
-def av(ax, ay, az):
-    return  fft(get_mag_data(ax, ay, az))
-
-# Similarity Functions
->>>>>>> ea6edf16a67c8f27a25a16273f27de5cbb0a6241
 def msq(fft1, fft2, freq1, freq2):
     err = 0
     for i in range(min(fft1.size, fft2.size, freq1.size, freq2.size)):
@@ -173,7 +125,6 @@ def get_multisim_data(names, ffts, freqs, funcs):
     out = np.array(out)
     return out
 
-<<<<<<< HEAD
 def get_single_multisim_data(name, fft, freq, names, ffts, freqs, funcs):
     out = []
     for i in range(0, len(names) - 1):
@@ -185,8 +136,6 @@ def get_single_multisim_data(name, fft, freq, names, ffts, freqs, funcs):
     out = np.array(out)
     return out
 
-=======
->>>>>>> ea6edf16a67c8f27a25a16273f27de5cbb0a6241
 def get_best_max_depth(np_array_of_data, max_depth_to_check=10, scoring='accuracy'):
     d_range = list(range(1, max_depth_to_check + 1))
     d_scores = []
