@@ -3,12 +3,25 @@ from scipy.fftpack import fft
 import requests
 import time
 import asyncio
+from sklearn.model_selection import cross_val_score
+from sklearn.tree import DecisionTreeClassifier
 from tornado import web, gen, ioloop
 import os
+import serial
 
 BUFSIZE = 1000
 FREQUENCY = 200.0
 REFRESH_SPEED = 3.0
+
+def commaed_save(path, filename, t, av):
+    if os.exists(path):
+        i = 0
+        newp = os.path.join(path, filename + str(i) + '.txt')
+        while os.path.exists(newp):
+            i+=1
+            newp = os.path.join(path, filename + str(i) + '.txt')
+        path = newp
+    np.savetxt(path, np.transpose(np.array([t, av])), delimiter=',')
 
 def find_border(t, n, dt, start_time):
     for i in range(len(t)):
@@ -16,6 +29,8 @@ def find_border(t, n, dt, start_time):
             return i-1, i
     return len(t)-1, len(t)
 
+<<<<<<< HEAD
+=======
 
 def generate_interpolated_data(data, t):
     start_time = t[0]
@@ -61,6 +76,7 @@ def av(ax, ay, az):
     return  fft(get_mag_data(ax, ay, az))
 
 # Similarity Functions
+>>>>>>> ea6edf16a67c8f27a25a16273f27de5cbb0a6241
 def msq(fft1, fft2, freq1, freq2):
     err = 0
     for i in range(min(fft1.size, fft2.size, freq1.size, freq2.size)):
@@ -93,7 +109,37 @@ def jaccard(fft1, fft2, freq1, freq2):
         intersection += min(fft1[i], fft2[i])
     return intersection / union
 
-# Code for Models
+def generate_interpolated_data(t, data):
+    start_time = t[0]
+    end_time = t[len(t)-1]
+    dt = 1000.0 / FREQUENCY
+    n = 1
+
+    ot = np.array([0.0])
+    out = np.array([data[0]])
+    while n*dt + start_time < end_time:
+        prev, curr = find_border(t, n, dt, start_time)
+        ct = start_time + n * dt
+        if curr < BUFSIZE:
+            ot = np.append(t, [n*dt])
+            out = np.append(out, [data[prev] * (1-((ct - t[prev]) / (t[curr] - t[prev]))
+                                                ) + data[curr] * (1-((t[curr] - ct) / (t[curr] - t[prev])))])
+            n += 1
+
+    return ot, out
+def assess_thresholding_function(names, ffts, freqs, func, sample_size: np.float64):
+    X_vals, y_vals = get_correlated_list(names, ffts, freqs, func)
+    X_vals, y_vals = np.array(X_vals), np.array(y_vals)
+    combined = np.rot90(np.array([X_vals, y_vals]))
+    min_value = np.min(X_vals)
+    max_value = np.max(X_vals)
+    step_size = (max_value - min_value) / sample_size
+    lowest_entropy = None
+    lowest_param_val = min_value
+
+    for x in np.arange(min_value, max_value, step_size):
+        y_pred = np.concatenate(np.ones((np.size(X_vals < x)), np.zeros(np.size(X_vals >= x))))
+        print(np.size(y_pred))
 
 def get_data(path_to_dir=os.path.join(os.getcwd(), 'data')):
     dataset = []
@@ -107,9 +153,9 @@ def get_freqs_and_fouriers(list_of_data):
     freq = []
     fourier = []
 
-    for i, item in enumerate(data):
-        t, ax, ay, az, gx, gy, gz = generate_interpolated_data(item)
-        fr, fo = av(ax, ay, az)
+    for i, item in enumerate(list_of_data):
+        t, av = generate_interpolated_data(item[:,0], item[:,1])
+        fr, fo = fft(av)
         freq.append(fr)
         fourier.append(fo)
 
@@ -127,6 +173,20 @@ def get_multisim_data(names, ffts, freqs, funcs):
     out = np.array(out)
     return out
 
+<<<<<<< HEAD
+def get_single_multisim_data(name, fft, freq, names, ffts, freqs, funcs):
+    out = []
+    for i in range(0, len(names) - 1):
+        cur_element_in_out = []
+        for func in funcs:
+            cur_element_in_out.append(func(ffts[i], fft, freqs[i], freq))
+        cur_element_in_out.append(1 if names[i] == name else 0)
+        out.append(cur_element_in_out)
+    out = np.array(out)
+    return out
+
+=======
+>>>>>>> ea6edf16a67c8f27a25a16273f27de5cbb0a6241
 def get_best_max_depth(np_array_of_data, max_depth_to_check=10, scoring='accuracy'):
     d_range = list(range(1, max_depth_to_check + 1))
     d_scores = []
@@ -143,7 +203,7 @@ def get_decision_tree_clf(names, ffts, freqs, funcs, max_depth_to_check=10, scor
     dt_clf.fit(X=np_array_of_data[:,:-1], y=np_array_of_data[:,-1])
     return dt_clf
 
-def get_decision_tree_clf(np_array_of_data, max_depth_to_check=10, scoring='accuracy'):
+def get_decision_tree_clf_processed(np_array_of_data, max_depth_to_check=10, scoring='accuracy'):
     dt_clf = DecisionTreeClassifier(max_depth=get_best_max_depth(np_array_of_data=np_array_of_data, max_depth_to_check=max_depth_to_check, scoring=scoring))
     dt_clf.fit(X=np_array_of_data[:,:-1], y=np_array_of_data[:,-1])
     return dt_clf
@@ -155,7 +215,7 @@ class MVDTCLassifier:
     def __init__(self, clfs=None):
         self.clfs=clfs
     def fit(self, X, y):
-        self.clfs = [get_decision_tree_clf(np_array_of_data=np.transpose(np.concatenate((np.array([ind_X]), np.array([y])), axis=0))) for ind_X in np.transpose(X)]
+        self.clfs = [get_decision_tree_clf_processed(np_array_of_data=np.transpose(np.concatenate((np.array([ind_X]), np.array([y])), axis=0))) for ind_X in np.transpose(X)]
         return self
 
     def predict(self, X):
@@ -169,7 +229,11 @@ class MVDTCLassifier:
             setattr(self, parameter, value)
         return self
 
+model = None
 calibrating = False
+model_not_updated = True
+ser = serial.Serial('ttyl/')
+
 class MainHandler(web.RequestHandler):
     def get(self):
         global calibrating
@@ -185,14 +249,51 @@ async def main_task():
     global calibrating
     try:
         print("Making new request")
+
         if calibrating:
             print("Calibration request")
-        x = requests.get('http://192.168.4.1', timeout=8)
 
-        av, t = generate_interpolated_data(x.json()['av'], x.json()['t'])
-        print(t)
-        print(av)
+        x = requests.get('http://192.168.4.1', timeout=8)
+        t, av = x.json()['t'], x.json()['av']
+        int_t, int_av = generate_interpolated_data(t, av)
+        freq, fourier = fft(av)
+
+        if calibrating:
+            commaed_save('pos_data', 'me', t, av)
+            commaed_save('total_data', 'me', t, av)
+            total_names, total_data = get_data('total_data')
+
+            total_freq, total_fourier = get_freqs_and_fouriers(total_data)
+            total_freq.append(freq)
+            total_fourier.append(fourier)
+
+            # CHIRAG: Save t and av to .csv file in both pos_data and tot_data
+
+            model = get_decision_tree_clf(total_names,
+                                        fourier,
+                                        freq,
+                                        funcs=[msq, jaccard, cossim, correlation, spectral_energy])
+
+        else:
+            if model == None:
+                ser.write(0)
+            else:
+                pos_names, pos_data = get_data('total_data')
+                pos_freq, pos_fourier = get_freqs_and_fouriers(total_data)
+
+                all_funcs_data = get_single_multisim_data('me', fourier, freq, pos_names, pos_fourier, pos_freq, [msq, jaccard, cossim, correlation, spectral_energy])
+
+                pred_ys = model.predict(all_funcs_data[:,:-1])
+
+                prediction = np.bincount(pred_ys).argmax()
+
+                ser.write(int(prediction))
+
+
+        # else if model_not_updated:
+
         # WRite authentication to serial port here
+
     except Exception as e:
         print(e)
     # calibrating = False
