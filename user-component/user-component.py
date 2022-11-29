@@ -1,18 +1,26 @@
 import numpy as np
-from scipy.fftpack import fft
 import requests
 import time
 import asyncio
-from sklearn.model_selection import cross_val_score
-from sklearn.tree import DecisionTreeClassifier
 from tornado import web, gen, ioloop
 import os
 import serial
 import traceback
 
+from scipy.fftpack import fft
+from scipy.spatial.distance import cosine
+from statsmodels.tsa.stattools import acf
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import cross_val_score
+
 BUFSIZE = 1000
-FREQUENCY = 200.0
+FREQUENCY = 100.0
 REFRESH_SPEED = 3.0
+
+def clear_calibration(path):
+    for file in os.listdir(path):
+        os.remove(os.path.join(path, file))
+
 
 def commaed_save(path, filename, t, av):
     print(f"Writing file: {os.path.join(path, filename)}")
@@ -89,6 +97,18 @@ def generate_interpolated_data(t, data):
             n += 1
 
     return ot, out
+
+def truncate_even_periods(series):
+    autocorr = acf(series, nlags=len(series) - 1)
+    mval = 0
+    mind = -1
+    for i in range(20, len(autocorr)):
+        if autocorr[i] > mval:
+            mind = i
+            mval = autocorr[i]
+
+    return series[0:int(len(series) / mind) * mind]
+
 def get_data(path_to_dir=os.path.join(os.getcwd(), 'data')):
     dataset = []
     for file_name in os.listdir(path_to_dir):
@@ -103,7 +123,8 @@ def get_freqs_and_fouriers(list_of_data):
 
     for i, item in enumerate(list_of_data):
         t, av = generate_interpolated_data(item[:,0], item[:,1])
-        fr, fo = fft(av)
+        av = truncate_even_periods(av)
+        fr, fo = fft(np.array(av))
         freq.append(fr)
         fourier.append(fo)
 
@@ -123,7 +144,7 @@ def get_multisim_data(names, ffts, freqs, funcs):
 
 def get_single_multisim_data(name, fft, freq, names, ffts, freqs, funcs):
     out = []
-    for i in range(0, len(names) - 1):
+    for i in range(0, len(names)):
         cur_element_in_out = []
         for func in funcs:
             cur_element_in_out.append(func(ffts[i], fft, freqs[i], freq))
@@ -181,6 +202,7 @@ model = None
 calibrating = False
 model_not_updated = True
 ser = serial.Serial('/dev/ttyACM0')
+do_once = True
 
 class MainHandler(web.RequestHandler):
     def get(self):
@@ -210,14 +232,15 @@ async def main_task():
 
         x = requests.get('http://192.168.4.1', timeout=8)
         t, av = x.json()['t'], x.json()['av']
-        print('Request complete')
+        print(f"Received {len(av)} data points")
         int_t, int_av = generate_interpolated_data(t, av)
-        print('Interpolated data')
+        print(f"Interpolated {len(int_av)} data points")
         freq, fourier = fft(int_av)
         print('Fourier Transform complete')
 
         if calibrating:
             print('Processing calibration data')
+            clear_calibration('pos_data')
             commaed_save('pos_data', 'me', t, av)
             commaed_save('total_data', 'me', t, av)
             print('Data saved')
@@ -227,13 +250,15 @@ async def main_task():
             total_freq.append(freq)
             total_fourier.append(fourier)
             print('Appended calibration data to total')
-            print(total_names)
-            print(fourier)
-            print(freq)
+            # print(total_names)
+            # print(fourier)
+            # print(freq)
             model = get_decision_tree_clf(total_names,
-                                        fourier,
-                                        freq,
+                                        total_fourier,
+                                        total_freq,
                                         funcs=[msq, jaccard, cossim, correlation, spectral_energy])
+
+
             print('Generated model')
 
 
@@ -245,13 +270,25 @@ async def main_task():
                 print('Running inference')
                 pos_names, pos_data = get_data('pos_data')
                 pos_freq, pos_fourier = get_freqs_and_fouriers(pos_data)
+                # print('fourier', fourier)
+                # print('freq', freq)
+                # print('pos_names', pos_names)
+                # print('pos_fourier', pos_fourier)
+                # print('pos_freq', pos_freq)
                 print('Processed dataset')
                 all_funcs_data = get_single_multisim_data('me', fourier, freq, pos_names, pos_fourier, pos_freq, [msq, jaccard, cossim, correlation, spectral_energy])
                 print('Generated similarity measures')
+                # print(np.info(all_funcs_data))
+                # print(all_funcs_data)
                 pred_ys = model.predict(all_funcs_data[:,:-1])
-                prediction = np.bincount(pred_ys).argmax()
+                print(pred_ys)
+                p1 = pred_ys.astype(np.int64)
+                p2 = np.bincount(p1)
+                p3 = p2.argmax()
+                prediction = p3
                 print('Generated prediction')
                 ser.write(int(prediction))
+                print('Prediction Value:', prediction)
                 print('Wrote prediction')
 
     except Exception as e:
