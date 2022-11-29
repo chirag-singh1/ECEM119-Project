@@ -15,6 +15,7 @@ FREQUENCY = 200.0
 REFRESH_SPEED = 3.0
 
 def commaed_save(path, filename, t, av):
+    print(f"Writing file: {os.path.join(path, filename)}")
     if os.path.exists(path):
         i = 0
         newp = os.path.join(path, filename + str(i) + '.txt')
@@ -143,8 +144,11 @@ def get_best_max_depth(np_array_of_data, max_depth_to_check=10, scoring='accurac
 
 def get_decision_tree_clf(names, ffts, freqs, funcs, max_depth_to_check=10, scoring='accuracy'):
     np_array_of_data = get_multisim_data(names, ffts, freqs, funcs)
+    print('Got np array')
     dt_clf = DecisionTreeClassifier(max_depth=get_best_max_depth(np_array_of_data=np_array_of_data, max_depth_to_check=max_depth_to_check, scoring=scoring))
+    print('Created decision tree')
     dt_clf.fit(X=np_array_of_data[:,:-1], y=np_array_of_data[:,-1])
+    print('Fit complete')
     return dt_clf
 
 def get_decision_tree_clf_processed(np_array_of_data, max_depth_to_check=10, scoring='accuracy'):
@@ -223,6 +227,9 @@ async def main_task():
             total_freq.append(freq)
             total_fourier.append(fourier)
             print('Appended calibration data to total')
+            print(total_names)
+            print(fourier)
+            print(freq)
             model = get_decision_tree_clf(total_names,
                                         fourier,
                                         freq,

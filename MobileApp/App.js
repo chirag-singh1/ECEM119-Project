@@ -283,6 +283,7 @@ export default class App extends Component {
 
   startCalibration() {
     fetch('http://192.168.4.2:8888/calibrate')
+    //fetch('https://google.com')
     .then((response) => {
       Alert.alert(
         "Calibration Started",
@@ -291,6 +292,7 @@ export default class App extends Component {
           { text: "OK", }
         ]
       );
+      console.log(response);
       this.setState({calibrated: !this.state.calibrated});
     })
     .catch((error) => {

@@ -12,7 +12,7 @@ const int SERVO_UNLOCKED = 0;
 const int threshold = 15;
 
 // Constants for Bluetooth
-const int VALID_TIME = 5000;
+const int VALID_TIME = 15000;
 
 // Local variables
 Servo servo;
@@ -29,6 +29,7 @@ bool open;
 bool pendingAuthentication;
 bool lastWrittenAuthentication;
 int activeBluetoothOverride;
+int lastAuthenticationReceived;
 
 void setup() {
 
@@ -58,6 +59,7 @@ void setup() {
   pendingAuthentication = false;
   lastWrittenAuthentication = false;
   activeBluetoothOverride = -1;
+  lastAuthenticationReceived = -15000;
   closeLock();
 }
 
@@ -106,6 +108,9 @@ void closeLock() {
 void checkSerial() {
   if (Serial.available() > 0) {
     pendingAuthentication = (Serial.parseInt() == 1);
+    if (pendingAuthentication) {
+      lastAuthenticationReceived = millis();
+    }
     Serial.readString();
 
     Serial.print("Read processed authentication: ");
@@ -152,9 +157,13 @@ void loop() {
   }
 
   if (activeBluetoothOverride == -1 || millis() - activeBluetoothOverride >= VALID_TIME) {
-    if (authenticated != pendingAuthentication) {
-      Serial.println("Updating authentication from pending value");
-      authenticated = pendingAuthentication;
+    if (authenticated && millis() - lastAuthenticationReceived > VALID_TIME) {
+      Serial.println("Authentication expired");
+      authenticated = false;
+    }
+    if (!authenticated && millis() - lastAuthenticationReceived <= VALID_TIME) {
+      Serial.println("Authentication activated");
+      authenticated = true;
     }
     activeBluetoothOverride = -1;
   }
