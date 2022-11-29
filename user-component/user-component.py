@@ -79,20 +79,6 @@ def generate_interpolated_data(t, data):
             n += 1
 
     return ot, out
-def assess_thresholding_function(names, ffts, freqs, func, sample_size: np.float64):
-    X_vals, y_vals = get_correlated_list(names, ffts, freqs, func)
-    X_vals, y_vals = np.array(X_vals), np.array(y_vals)
-    combined = np.rot90(np.array([X_vals, y_vals]))
-    min_value = np.min(X_vals)
-    max_value = np.max(X_vals)
-    step_size = (max_value - min_value) / sample_size
-    lowest_entropy = None
-    lowest_param_val = min_value
-
-    for x in np.arange(min_value, max_value, step_size):
-        y_pred = np.concatenate(np.ones((np.size(X_vals < x)), np.zeros(np.size(X_vals >= x))))
-        print(np.size(y_pred))
-
 def get_data(path_to_dir=os.path.join(os.getcwd(), 'data')):
     dataset = []
     for file_name in os.listdir(path_to_dir):
@@ -110,7 +96,7 @@ def get_freqs_and_fouriers(list_of_data):
         fr, fo = fft(av)
         freq.append(fr)
         fourier.append(fo)
-
+        
     return freq, fourier
 
 def get_multisim_data(names, ffts, freqs, funcs):
@@ -118,7 +104,7 @@ def get_multisim_data(names, ffts, freqs, funcs):
     for i in range(0, len(names) - 1):
         for j in range(i + 1, len(names)):
             cur_element_in_out = []
-            for func in funcs:
+            for func in funcs: 
                 cur_element_in_out.append(func(ffts[i], ffts[j], freqs[i], freqs[j]))
             cur_element_in_out.append(1 if names[i] == names[j] else 0)
             out.append(cur_element_in_out)
@@ -129,13 +115,13 @@ def get_single_multisim_data(name, fft, freq, names, ffts, freqs, funcs):
     out = []
     for i in range(0, len(names) - 1):
         cur_element_in_out = []
-        for func in funcs:
+        for func in funcs: 
             cur_element_in_out.append(func(ffts[i], fft, freqs[i], freq))
         cur_element_in_out.append(1 if names[i] == name else 0)
         out.append(cur_element_in_out)
     out = np.array(out)
     return out
-
+  
 def get_best_max_depth(np_array_of_data, max_depth_to_check=10, scoring='accuracy'):
     d_range = list(range(1, max_depth_to_check + 1))
     d_scores = []
@@ -145,7 +131,7 @@ def get_best_max_depth(np_array_of_data, max_depth_to_check=10, scoring='accurac
         scores = cross_val_score(dt_clf, X=np_array_of_data[:,:-1], y=np_array_of_data[:,-1], cv=min_size, scoring=scoring)
         d_scores.append(scores.mean())
     return d_range[np.argmax(d_scores)]
-
+    
 def get_decision_tree_clf(names, ffts, freqs, funcs, max_depth_to_check=10, scoring='accuracy'):
     np_array_of_data = get_multisim_data(names, ffts, freqs, funcs)
     dt_clf = DecisionTreeClassifier(max_depth=get_best_max_depth(np_array_of_data=np_array_of_data, max_depth_to_check=max_depth_to_check, scoring=scoring))
@@ -169,7 +155,7 @@ class MVDTCLassifier:
 
     def predict(self, X):
         return np.round(np.average(np.transpose(np.array([self.clfs[i].predict(ind_X.reshape(-1, 1)) for ind_X in np.transpose(X)])), axis=1) + 0.001)
-
+    
     def get_params(self, deep=False):
         return {"clfs": self.clfs}
 
@@ -227,8 +213,8 @@ async def main_task():
             if model == None:
                 ser.write(0)
             else:
-                pos_names, pos_data = get_data('total_data')
-                pos_freq, pos_fourier = get_freqs_and_fouriers(total_data)
+                pos_names, pos_data = get_data('pos_data')
+                pos_freq, pos_fourier = get_freqs_and_fouriers(pos_data)
 
                 all_funcs_data = get_single_multisim_data('me', fourier, freq, pos_names, pos_fourier, pos_freq, [msq, jaccard, cossim, correlation, spectral_energy])
 
