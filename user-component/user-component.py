@@ -8,13 +8,14 @@ from sklearn.tree import DecisionTreeClassifier
 from tornado import web, gen, ioloop
 import os
 import serial
+import traceback
 
 BUFSIZE = 1000
 FREQUENCY = 200.0
 REFRESH_SPEED = 3.0
 
 def commaed_save(path, filename, t, av):
-    if os.exists(path):
+    if os.path.exists(path):
         i = 0
         newp = os.path.join(path, filename + str(i) + '.txt')
         while os.path.exists(newp):
@@ -61,6 +62,14 @@ def jaccard(fft1, fft2, freq1, freq2):
         intersection += min(fft1[i], fft2[i])
     return intersection / union
 
+def fft(x):
+    fourier = np.fft.fft(x)
+    n = x.size
+    timestep = 0.1
+    freq = np.fft.fftfreq(n)
+
+    return freq, abs(fourier)
+
 def generate_interpolated_data(t, data):
     start_time = t[0]
     end_time = t[len(t)-1]
@@ -96,7 +105,7 @@ def get_freqs_and_fouriers(list_of_data):
         fr, fo = fft(av)
         freq.append(fr)
         fourier.append(fo)
-        
+
     return freq, fourier
 
 def get_multisim_data(names, ffts, freqs, funcs):
@@ -104,7 +113,7 @@ def get_multisim_data(names, ffts, freqs, funcs):
     for i in range(0, len(names) - 1):
         for j in range(i + 1, len(names)):
             cur_element_in_out = []
-            for func in funcs: 
+            for func in funcs:
                 cur_element_in_out.append(func(ffts[i], ffts[j], freqs[i], freqs[j]))
             cur_element_in_out.append(1 if names[i] == names[j] else 0)
             out.append(cur_element_in_out)
@@ -115,13 +124,13 @@ def get_single_multisim_data(name, fft, freq, names, ffts, freqs, funcs):
     out = []
     for i in range(0, len(names) - 1):
         cur_element_in_out = []
-        for func in funcs: 
+        for func in funcs:
             cur_element_in_out.append(func(ffts[i], fft, freqs[i], freq))
         cur_element_in_out.append(1 if names[i] == name else 0)
         out.append(cur_element_in_out)
     out = np.array(out)
     return out
-  
+
 def get_best_max_depth(np_array_of_data, max_depth_to_check=10, scoring='accuracy'):
     d_range = list(range(1, max_depth_to_check + 1))
     d_scores = []
@@ -131,7 +140,7 @@ def get_best_max_depth(np_array_of_data, max_depth_to_check=10, scoring='accurac
         scores = cross_val_score(dt_clf, X=np_array_of_data[:,:-1], y=np_array_of_data[:,-1], cv=min_size, scoring=scoring)
         d_scores.append(scores.mean())
     return d_range[np.argmax(d_scores)]
-    
+
 def get_decision_tree_clf(names, ffts, freqs, funcs, max_depth_to_check=10, scoring='accuracy'):
     np_array_of_data = get_multisim_data(names, ffts, freqs, funcs)
     dt_clf = DecisionTreeClassifier(max_depth=get_best_max_depth(np_array_of_data=np_array_of_data, max_depth_to_check=max_depth_to_check, scoring=scoring))
@@ -155,7 +164,7 @@ class MVDTCLassifier:
 
     def predict(self, X):
         return np.round(np.average(np.transpose(np.array([self.clfs[i].predict(ind_X.reshape(-1, 1)) for ind_X in np.transpose(X)])), axis=1) + 0.001)
-    
+
     def get_params(self, deep=False):
         return {"clfs": self.clfs}
 
@@ -167,7 +176,7 @@ class MVDTCLassifier:
 model = None
 calibrating = False
 model_not_updated = True
-ser = serial.Serial('ttyl/')
+ser = serial.Serial('/dev/ttyACM0')
 
 class MainHandler(web.RequestHandler):
     def get(self):
@@ -180,57 +189,67 @@ def make_app():
         (r"/calibrate", MainHandler),
     ])
 
+def print_arduino_logs():
+    nbytes = ser.in_waiting
+    if nbytes != 0:
+        print("=============ARDUINO START=============")
+        print(ser.read(nbytes).decode('utf-8'))
+        print("=============ARDUINO END=============")
+
 async def main_task():
     global calibrating
+    global model
     try:
-        print("Making new request")
+        print_arduino_logs()
 
-        if calibrating:
-            print("Calibration request")
+        print("Making new request")
 
         x = requests.get('http://192.168.4.1', timeout=8)
         t, av = x.json()['t'], x.json()['av']
+        print('Request complete')
         int_t, int_av = generate_interpolated_data(t, av)
-        freq, fourier = fft(av)
+        print('Interpolated data')
+        freq, fourier = fft(int_av)
+        print('Fourier Transform complete')
 
         if calibrating:
+            print('Processing calibration data')
             commaed_save('pos_data', 'me', t, av)
             commaed_save('total_data', 'me', t, av)
+            print('Data saved')
             total_names, total_data = get_data('total_data')
-
             total_freq, total_fourier = get_freqs_and_fouriers(total_data)
+            print('Processed calibration data')
             total_freq.append(freq)
             total_fourier.append(fourier)
-
-            # CHIRAG: Save t and av to .csv file in both pos_data and tot_data
-
+            print('Appended calibration data to total')
             model = get_decision_tree_clf(total_names,
                                         fourier,
                                         freq,
                                         funcs=[msq, jaccard, cossim, correlation, spectral_energy])
+            print('Generated model')
+
 
         else:
             if model == None:
+                print('Model not initialized, writing 0')
                 ser.write(0)
             else:
+                print('Running inference')
                 pos_names, pos_data = get_data('pos_data')
                 pos_freq, pos_fourier = get_freqs_and_fouriers(pos_data)
-
+                print('Processed dataset')
                 all_funcs_data = get_single_multisim_data('me', fourier, freq, pos_names, pos_fourier, pos_freq, [msq, jaccard, cossim, correlation, spectral_energy])
-
+                print('Generated similarity measures')
                 pred_ys = model.predict(all_funcs_data[:,:-1])
-
                 prediction = np.bincount(pred_ys).argmax()
-
+                print('Generated prediction')
                 ser.write(int(prediction))
-
-
-        # else if model_not_updated:
-
-        # WRite authentication to serial port here
+                print('Wrote prediction')
 
     except Exception as e:
         print(e)
+        traceback.print_exc()
     # calibrating = False
 
 async def main():
